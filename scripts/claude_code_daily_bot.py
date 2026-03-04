@@ -77,7 +77,7 @@ _対象: 日本の不動産業・製造業・クリニック向け実践事例_
 
     message = client.messages.create(
         model="claude-opus-4-5",
-        max_tokens=1500,
+        max_tokens=3000,
         messages=[{"role": "user", "content": prompt}],
     )
     return message.content[0].text
