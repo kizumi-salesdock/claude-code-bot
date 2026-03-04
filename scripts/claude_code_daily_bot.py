@@ -59,7 +59,7 @@ def generate_use_cases() -> str:
 """
 
     message = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-opus-4-5",
         max_tokens=1500,
         messages=[{"role": "user", "content": prompt}],
     )
