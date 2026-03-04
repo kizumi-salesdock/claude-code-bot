@@ -5,7 +5,7 @@ Claude Code Daily Slack Bot
 
 import os
 import sys
-import json
+import traceback
 from datetime import datetime, timezone, timedelta
 import requests
 import anthropic
@@ -59,7 +59,7 @@ def generate_use_cases() -> str:
 """
 
     message = client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-3-5-sonnet-20241022",
         max_tokens=1500,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -110,9 +110,15 @@ def main() -> None:
         sys.exit(1)
     except anthropic.APIError as e:
         print(f"❌ Claude APIエラー: {e}", file=sys.stderr)
+        traceback.print_exc()
         sys.exit(1)
     except RuntimeError as e:
         print(f"❌ {e}", file=sys.stderr)
+        traceback.print_exc()
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ 予期しないエラー: {e}", file=sys.stderr)
+        traceback.print_exc()
         sys.exit(1)
 
 
