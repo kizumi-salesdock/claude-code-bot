@@ -2,32 +2,113 @@ name: Claude Code Daily Bot
 
 on:
   schedule:
-    # 毎日 23:00 UTC = 翌朝 08:00 JST
+    # 毎日 23:00 UTC = 翌朝 08:00 JST（ユースケース通知）
     - cron: '0 23 * * *'
-  workflow_dispatch:  # 手動実行ボタンを有効化
+    # 毎日 03:00 UTC = 12:00 JST（ミニチャレンジ）
+    - cron: '0 3 * * *'
+    # 毎日 12:00 UTC = 21:00 JST（振り返り）
+    - cron: '0 12 * * *'
+    # 毎週金曜 12:00 UTC = 金曜21:00 JST（週次サマリー）
+    - cron: '0 12 * * 5'
+  workflow_dispatch:
+    inputs:
+      bot_type:
+        description: '実行するBot（usecase / challenge / reflection / weekly_summary）'
+        required: true
+        default: 'usecase'
+        type: choice
+        options:
+          - usecase
+          - challenge
+          - reflection
+          - weekly_summary
 
 jobs:
-  post-to-slack:
+  # ── 朝8時: ユースケース通知 ─────────────────────
+  post-usecase:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 23 * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.bot_type == 'usecase')
     steps:
-      - name: リポジトリをチェックアウト
-        uses: actions/checkout@v4
-
-      - name: Python をセットアップ
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
           cache-dependency-path: scripts/requirements.txt
-
-      - name: 依存パッケージをインストール
-        run: pip install -r scripts/requirements.txt
-
-      - name: Claude Code ユースケースを生成して Slack に投稿
+      - run: pip install -r scripts/requirements.txt
+      - name: ユースケース通知を投稿
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SLACK_BOT_TOKEN:   ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID:  ${{ secrets.SLACK_CHANNEL_ID }}
         run: python scripts/claude_code_daily_bot.py
+
+  # ── 昼12時: ミニチャレンジ ────────────────────
+  post-challenge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 3 * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.bot_type == 'challenge')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: scripts/requirements.txt
+      - run: pip install -r scripts/requirements.txt
+      - name: ミニチャレンジを投稿
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SLACK_BOT_TOKEN:   ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID:  ${{ secrets.SLACK_CHANNEL_ID }}
+        run: python scripts/challenge_bot.py
+
+  # ── 夜21時: 振り返り通知 ──────────────────────
+  post-reflection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 12 * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.bot_type == 'reflection')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: scripts/requirements.txt
+      - run: pip install -r scripts/requirements.txt
+      - name: 振り返りを投稿
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SLACK_BOT_TOKEN:   ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID:  ${{ secrets.SLACK_CHANNEL_ID }}
+        run: python scripts/reflection_bot.py
+
+  # ── 毎週金曜21時: 週次サマリー ────────────────
+  post-weekly-summary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 12 * * 5') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.bot_type == 'weekly_summary')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: scripts/requirements.txt
+      - run: pip install -r scripts/requirements.txt
+      - name: 週次サマリーを投稿
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SLACK_BOT_TOKEN:   ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID:  ${{ secrets.SLACK_CHANNEL_ID }}
+          SLACK_USER_ID:     ${{ secrets.SLACK_USER_ID }}
+        run: python scripts/weekly_summary_bot.py
