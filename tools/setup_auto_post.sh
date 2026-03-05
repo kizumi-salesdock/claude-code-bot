@@ -1,0 +1,189 @@
+#!/bin/bash
+set -e
+
+echo "📦 1. 更新: tools/x_queue_deliver.py (GitHub Actions対応)"
+cat << 'EOF' > tools/x_queue_deliver.py
+#!/usr/bin/env python3
+"""
+X投稿キュー配信スクリプト
+========================
+GitHub Actionsおよびローカルでの実行に対応。
+"""
+import os, sys, json, ssl
+import urllib.request, urllib.parse
+from datetime import datetime
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+QUEUE_FILE = os.path.join(PROJECT_ROOT, "tools", "config", "x_post_queue.json")
+
+# GitHub ActionsのSecrets(またはローカルの環境変数)から取得
+SLACK_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
+SLACK_CHANNEL = "C083SR8SX24"
+USER_ID = "U082PFM1VN3"
+ssl._create_default_https_context = ssl._create_unverified_context
+
+def log(msg): print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+def load_queue():
+    try:
+        with open(QUEUE_FILE, "r", encoding="utf-8") as f: return json.load(f)
+    except: return []
+
+def save_queue(q):
+    os.makedirs(os.path.dirname(QUEUE_FILE), exist_ok=True)
+    with open(QUEUE_FILE, "w", encoding="utf-8") as f: json.dump(q, f, ensure_ascii=False, indent=2)
+
+def slack_post(text):
+    url = "https://slack.com/api/chat.postMessage"
+    headers = {"Authorization": f"Bearer {SLACK_TOKEN}", "Content-Type": "application/x-www-form-urlencoded"}
+    data = urllib.parse.urlencode({"channel": SLACK_CHANNEL, "text": text}).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers=headers)
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read()).get("ok", False)
+    except Exception as e:
+        log(f"Slack API Error: {e}")
+        return False
+
+def deliver():
+    queue = load_queue()
+    if not queue:
+        slack_post(f"<@{USER_ID}> ⚠️ X投稿のストックが空になりました。Claudeに「業務改善・HubSpot関連のネタを追加して」と依頼してください。")
+        log("📭 キュー空。リマインド送信。"); return
+
+    post = queue.pop(0)
+    save_queue(queue)
+
+    msg = f"<@{USER_ID}> 📝 *X投稿案* — {post['category']}\n\n{post['text']}"
+    if slack_post(msg):
+        log(f"✅ 配信: {post['theme']}（残り{len(queue)}件）")
+    else:
+        log("❌ Slack投稿失敗"); queue.insert(0, post); save_queue(queue)
+
+    # 残り少なければリマインド
+    if len(queue) <= 6 and len(queue) > 0:
+        slack_post(f"<@{USER_ID}> 📊 X投稿ストック残り *{len(queue)}件* です。Claudeに「業務改善・HubSpot関連のネタを追加して」と依頼してください。")
+
+def status():
+    queue = load_queue()
+    log(f"📊 キュー残り: {len(queue)}件")
+    for i, p in enumerate(queue, 1):
+        log(f"  {i}. [{p['category']}] {p['theme']}")
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "deliver"
+    if cmd == "status": status()
+    else: deliver()
+EOF
+chmod +x tools/x_queue_deliver.py
+
+
+echo "📦 2. 更新: tools/config/x_post_queue.json (業務改善・HubSpot特化)"
+cat << 'EOF' > tools/config/x_post_queue.json
+[
+  {
+    "category": "HubSpot活用・CRM",
+    "theme": "CRMの入力項目を30個から3個に減らした本当の理由",
+    "text": "ある会社のHubSpot構築に入ったときの話。\n\n「営業にこれとあれを入力させたい」と、管理項目が30個もあった。結果的に誰も入力せず、データは空欄だらけ。\n\n『本当に営業会議で見る数字は何ですか？』と話し合い、項目を「ステージ」「見込み金額」「次回予定日」の3つに絞った。\n\nすると入力率は劇的に上がり、まともなデータが揃い始めた。\n\nCRM導入で一番大事なのは「管理したい欲」を捨てること。現場の入力コストと、得られるデータの価値のバランスを取らなければ、システムは数ヶ月で腐る。"
+  },
+  {
+    "category": "業務改善・組織",
+    "theme": "報告の時間を「ゼロ」にする設計",
+    "text": "「現場からちゃんと報告が上がってこない」\n\nそう悩む経営者は多いが、実は構造の問題。現場からすると「報告」は本来業務ではなく「ただの追加タスク」だから。\n\n上手くいっている組織は、報告をさせない。\n『日々の業務ツール（CRMやタスク管理）を更新すれば、それが自動的にレポートになる状態』を作っている。\n\nHubSpotのダッシュボードなんてまさにそれで、商談ログを書けば勝手に経営の可視化が完了する仕組みだ。\n\n「もっと報告しろ」と言う前に、「勝手に報告が完了する仕組み」を設計するべき。"
+  },
+  {
+    "category": "HubSpot活用・営業",
+    "theme": "失注案件を『宝の山』に変えるシンプルな仕組み",
+    "text": "営業で差がつくのは「失注した案件のその後」の扱い。\n\n多くの会社は失注したらそのリードを捨てる。でも「今は予算がない」「今はタイミングじゃない」だけのケースは山ほどある。\n\nHubSpotのワークフローを使えば、「失注理由が『時期・予算』だった案件は、3ヶ月後に自動でIS（インサイドセールス）のタスクにリマインドする」といった設計が5分でできる。\n\nこれだけで、ゼロから新規リードを獲得するよりも圧倒的に高い確率で再商談化できる。CRMの本当の価値は、こういう「忘却を防ぐ仕組み」にある。"
+  },
+  {
+    "category": "業務改善・マニュアル",
+    "theme": "完璧なマニュアルを作っても現場が変わらない理由",
+    "text": "BPO支援をしているとよく出くわす光景。\n\n「マニュアルは完璧に作りました。でも現場がミスをします」\n\n見せてもらうと、100ページのExcelマニュアルが共有フォルダの奥底に眠っている。\n\n現場でミスが起こる時、作業者は「マニュアルを開く余裕すらなく忙しい」か「どれを見ればいいか分からない」状態にある。\n\nだから、手順書を作るだけでは意味がない。\n『迷った瞬間に、手元から1クリックで該当箇所が開ける状態』まで設計して、初めてマニュアルは機能する。\n\nドキュメントの質より、アクセスの設計が10倍重要。"
+  },
+  {
+    "category": "HubSpot活用・マーケ",
+    "theme": "営業とマーケの対立を「共通KPI」で解決した話",
+    "text": "「マーケが持ってくるリードの質が悪い」\n「営業が渡したリードを追いかけてくれない」\n\nよくある営業とマーケの対立。原因はシンプルで「追っている数字（KPI）が違うから」起きる。\n\nマーケが『リード数』を、営業が『受注数』を追っている限り、この対立は終わらない。\n\n解決策は1つ。HubSpotなどのダッシュボードで、「ターゲットアカウント（ABM）からの商談化率・受注金額」を共通KPIとしてど真ん中に置くこと。\n\n同じ数字を追わなければ、チームは同じ方向を向けない。システムの前に、まず指標を揃える。"
+  },
+  {
+    "category": "業務改善・経営",
+    "theme": "数字の「見せ方」を変えるだけで経営会議が変わる",
+    "text": "ある会社の会議に入った時のこと。\nいつもスプレッドシートの表でズラーっと数字を並べていた。会議は「共有」だけで終わり、アクションが出ない。\n\n次の会議で、全く同じ数字をHubSpotの「目標対比の積み上げ棒グラフ」にして見せた。\n\nすると、「営業Aさんはアポは多いのに案件化してないね」「ここの歩留まりが先月より悪いのはなぜ？」と、一気に議論が始まった。\n\n数字は「見る」ものじゃない。「どこに問題があるか」を直感的に気づかせるためのもの。見せ方を変えるだけで、組織の課題解決スピードは劇的に上がる。"
+  },
+  {
+    "category": "業務改善・DX",
+    "theme": "「手書きのFAX」をいきなり否定しないDX",
+    "text": "製造業などの現場に行くと思う。\n「手書きのFAXが飛び交っている＝悪」ではない。\n\nそのアナログな方法で、数十年間事業を支え、お客さんとの信頼関係を築いてきたという事実があるからだ。\n\nいきなり「システムを入れましょう！全部クラウドです！」と言っても、現場は反発するだけ。\n\nDXの第一歩は「今のアナログ作業の中で、何が一番現場を苦しめているか」を見つけること。\n\n経営者の「可視化したい」という欲と、現場の「楽になりたい」という欲。この2つが重なるポイントから着手しないと、業務改善は絶対に定着しない。"
+  },
+  {
+    "category": "HubSpot活用・仕組み化",
+    "theme": "アポイント時の「温度感」で商談担当を分ける",
+    "text": "「全ての初回商談にベテラン営業を出している」会社は意外と多い。\n\nでも、まだ情報収集段階のリードにベテランの時間を割くのは非効率。逆に、今すぐ相談したい熱いリードに新人が出ると機会損失になる。\n\nHubSpotのフォームや、IS（インサイドセールス）のヒアリング項目に「導入検討の時期」を一つ追加する。\n\nそして温度感が低い場合は若手や動画セミナーへ、高い場合はベテランへ自動でアサインを振り分ける仕組み。\n\nこれだけで、商談の成約率と、エース営業の時間の使い方が劇的に改善される。"
+  },
+  {
+    "category": "組織マネジメント・データ",
+    "theme": "インターンや新人の「3ヶ月目の失速」をデータで救う",
+    "text": "インターンや新入社員が、入社3ヶ月目でなんとなく手が止まったり、モチベーションが下がったりする。\n\n「最近元気ないね」と感覚で声かけをしていないか。\n\n勤怠データやCRMの活動ログをモニタリングして、「月平均の稼働率」や「1日あたりのコール数」の推移をダッシュボード化しておく。\n\n「稼働率が先月の40%に落ちているけど、大学の授業が忙しい？」\n\nデータという客観的な事実があるからこそ、感情的にならずに踏み込んだケアができる。データは管理するためではなく、人を適切にサポートするために使うもの。"
+  },
+  {
+    "category": "業務改善・AI活用",
+    "theme": "AIに「商談準備」を任せたら、営業が売ることに専念できた",
+    "text": "営業の仕事のうち、「顧客と話している時間」は実は全体の3割ほどしかないと言われている。\n\n残りは何か？リスト作成、提案書の作成、日報、そして「商談前の情報収集（準備）」。\n\n最近構築した仕組みでは、翌日のカレンダーに入っている商談相手の企業情報を、AIが自動でスクレイピング・要約し、HubSpotの会社レコードやSlackに自動でまとめてくれるようにした。\n\n営業にとって一番価値が高いのは「顧客と向き合っている時間」。\nそれ以外の時間は、システムとAIに徹底的に任せる。これがこれからの業務効率化の基本になる。"
+  }
+]
+EOF
+
+echo "📦 3. 作成: .github/workflows/x-auto-post.yml (4時間ごとの自動実行)"
+mkdir -p .github/workflows
+cat << 'EOF' > .github/workflows/x-auto-post.yml
+name: X Auto Post Deliver
+
+on:
+  schedule:
+    # 4時間おきに実行 (UTC 3, 7, 11, 15, 19, 23 => JST 12, 16, 20, 0, 4, 8)
+    - cron: '0 3,7,11,15,19,23 * * *'
+  workflow_dispatch: # 手動実行用トリガー
+
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Run script to deliver post to Slack
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          python3 tools/x_queue_deliver.py deliver
+
+      - name: Commit updated queue.json
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add tools/config/x_post_queue.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: auto-update X post queue" && git push)
+EOF
+
+echo "📦 4. クリーンアップ: 既存のローカル launchd 設定の解除"
+if launchctl list | grep -q "com.salesdock.x-queue-deliver"; then
+    launchctl unload ~/Library/LaunchAgents/com.salesdock.x-queue-deliver.plist || true
+    echo "✅ 古い launchd ジョブを unload しました。"
+else
+    echo "ℹ️ launchd ジョブは見つかりませんでした。"
+fi
+echo "========================================="
+echo "🎉 すべての自動化セットアップが完了しました！"
+echo "  1. GitHub Actions のワークフローを生成しました。"
+echo "  2. 配信スクリプトを環境変数対応にアップデートしました。"
+echo "  3. 投稿キューの内容を HubSpot・業務改善 特化の10件に刷新しました。"
+echo "  4. これらをすべて GitHub にプッシュすれば自動実行が始まります。"

@@ -1,0 +1,35 @@
+name: X Auto Post Deliver
+
+on:
+  schedule:
+    # 4時間おきに実行 (UTC 3, 7, 11, 15, 19, 23 => JST 12, 16, 20, 0, 4, 8)
+    - cron: '0 3,7,11,15,19,23 * * *'
+  workflow_dispatch: # 手動実行用トリガー
+
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Run script to deliver post to Slack
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          python3 tools/x_queue_deliver.py deliver
+
+      - name: Commit updated queue.json
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add tools/config/x_post_queue.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: auto-update X post queue" && git push)
