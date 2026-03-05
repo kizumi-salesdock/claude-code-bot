@@ -23,7 +23,7 @@ QUEUE_FILE = os.path.join(PROJECT_ROOT, "tools", "config", "x_post_queue.json")
 SLACK_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
-SOURCE_CHANNELS = ["C08EM8F6REF", "C083SR8SX24"] # #minutes, #general
+SOURCE_CHANNELS = ["C08EM8F6REF", "C083SR8SX24", "C087RV7D97T"] # #minutes, #general, #times-izumi
 MAX_MESSAGES_PER_CH = 15
 
 ssl._create_default_https_context = ssl._create_unverified_context
