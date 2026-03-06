@@ -86,7 +86,7 @@ def call_anthropic(prompt):
     }
     
     data = json.dumps({
-        "model": "claude-3-7-sonnet-20250219",
+        "model": "claude-3-5-sonnet-20241022",
         "max_tokens": 4000,
         "temperature": 0.8,
         "messages": [
